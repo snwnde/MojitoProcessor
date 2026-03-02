@@ -41,7 +41,9 @@ class SignalProcessor:
     Attributes
     ----------
     data : dict
-        Current processed data (updated after each operation)
+        Current processed data (updated after each operation). Includes a ``'t'``
+        key giving the time array ``[t0, t0+dt, ..., t0+(N-1)*dt]`` in seconds
+        (or ``[0, dt, ..., (N-1)*dt]`` when ``t0`` is ``None``).
     fs : float
         Current sampling frequency in Hz
     N : int
@@ -50,6 +52,8 @@ class SignalProcessor:
         Current duration in seconds
     dt : float
         Current sampling period in seconds
+    t : ndarray
+        Time array ``[t0, t0+dt, ..., t0+(N-1)*dt]`` in seconds.
     channels : list
         List of channel names
 
@@ -59,6 +63,7 @@ class SignalProcessor:
     >>> filtered = sp.filter(low=1e-4, high=1.0, order=6)
     >>> trimmed = sp.trim(fraction=0.02)  # Trim 2% total (1% each end)
     >>> windowed = sp.apply_window(window='tukey', alpha=0.05)
+    >>> t = sp.data['t']   # time array [t0, t0+dt, ..., t0+(N-1)*dt]
     """
 
     def __init__(
@@ -81,13 +86,13 @@ class SignalProcessor:
             the L1 data file (``data["t_tdi"][0]``). Defaults to ``None``
             when working outside of a full Mojito pipeline.
         """
-        self.data = {ch: arr.copy() for ch, arr in data.items()}
+        self._data = {ch: arr.copy() for ch, arr in data.items()}
         self.fs = float(fs)
         self.t0 = float(t0) if t0 is not None else None
         self.channels = list(data.keys())
 
         # Validate all channels have same length
-        lengths = [len(arr) for arr in self.data.values()]
+        lengths = [len(arr) for arr in self._data.values()]
         if len(set(lengths)) != 1:
             raise ValueError(f"All channels must have same length. Got: {lengths}")
 
@@ -95,9 +100,32 @@ class SignalProcessor:
 
     def _update_params(self):
         """Update derived parameters N, T, dt based on current data and fs."""
-        self.N = len(self.data[self.channels[0]])
+        self.N = len(self._data[self.channels[0]])
         self.dt = 1.0 / self.fs
         self.T = self.N * self.dt
+
+    @property
+    def data(self) -> dict:
+        """
+        Channel data as a dict, including a ``'t'`` key for the time array.
+
+        The time array is ``t0 + np.arange(N) * dt`` (seconds). When ``t0``
+        is ``None``, the array starts from 0.
+
+        Returns
+        -------
+        dict
+            All channel arrays plus ``'t'``.
+        """
+        result = dict(self._data)
+        result["t"] = self.t
+        return result
+
+    @property
+    def t(self) -> np.ndarray:
+        """Time array ``[t0, t0+dt, ..., t0+(N-1)*dt]`` in seconds."""
+        t_start = self.t0 if self.t0 is not None else 0.0
+        return t_start + np.arange(self.N) * self.dt
 
     def filter(
         self,
@@ -223,12 +251,12 @@ class SignalProcessor:
         filtered_data = {}
         for ch in self.channels:
             if zero_phase:
-                filtered_data[ch] = signal.sosfiltfilt(sos, self.data[ch])
+                filtered_data[ch] = signal.sosfiltfilt(sos, self._data[ch])
             else:
-                filtered_data[ch] = signal.sosfilt(sos, self.data[ch])
+                filtered_data[ch] = signal.sosfilt(sos, self._data[ch])
 
         # Update internal state
-        self.data = filtered_data
+        self._data = filtered_data
         # fs, N, T, dt remain unchanged after filtering
 
         return filtered_data
@@ -325,10 +353,10 @@ class SignalProcessor:
         resampled_data = {}
         for ch in self.channels:
             resampled_data[ch] = signal.resample_poly(
-                self.data[ch], up, down, window=window, padtype=padtype
+                self._data[ch], up, down, window=window, padtype=padtype
             )
 
-        self.data = resampled_data
+        self._data = resampled_data
         self.fs = self.fs * up / down
         self._update_params()
 
@@ -365,7 +393,7 @@ class SignalProcessor:
 
         # No trimming needed
         if fraction == 0:
-            return dict(self.data)
+            return dict(self._data)
 
         # Split fraction equally between both ends
         trim_samples = int(self.N * fraction / 2)
@@ -376,18 +404,18 @@ class SignalProcessor:
                 fraction,
                 1,
             )
-            return dict(self.data)
+            return dict(self._data)
         if 2 * trim_samples >= self.N:
             raise ValueError(
                 f"Cannot trim {fraction*100:.1f}% from both ends "
                 f"({2*trim_samples} samples). Would remove all data."
             )
         trimmed_data = {
-            ch: arr[trim_samples:-trim_samples] for ch, arr in self.data.items()
+            ch: arr[trim_samples:-trim_samples] for ch, arr in self._data.items()
         }
 
         # Update internal state
-        self.data = trimmed_data
+        self._data = trimmed_data
         if self.t0 is not None:
             self.t0 += trim_samples * self.dt
         self._update_params()
@@ -455,10 +483,10 @@ class SignalProcessor:
             win = window_funcs[window](self.N, {})
 
         # Apply window to all channels
-        windowed_data = {ch: arr * win for ch, arr in self.data.items()}
+        windowed_data = {ch: arr * win for ch, arr in self._data.items()}
 
         # Update internal state
-        self.data = windowed_data
+        self._data = windowed_data
         # fs, N, T, dt remain unchanged after windowing
 
         return windowed_data
@@ -490,7 +518,7 @@ class SignalProcessor:
         freqs = np.fft.rfftfreq(self.N, d=self.dt)
         psds = {}
         for ch in self.channels:
-            fft_vals = np.fft.rfft(self.data[ch])
+            fft_vals = np.fft.rfft(self._data[ch])
             psd = (np.abs(fft_vals) ** 2) / (self.fs * self.N)
             psd[1:-1] *= 2  # double non-DC/Nyquist bins for one-sided spectrum
             psds[ch] = psd
@@ -520,7 +548,7 @@ class SignalProcessor:
         freqs = np.fft.rfftfreq(self.N, d=self.dt)
         ffts = {}
         for ch in self.channels:
-            ffts[ch] = np.fft.rfft(self.data[ch])
+            ffts[ch] = np.fft.rfft(self._data[ch])
         return freqs, ffts
 
     def to_aet(self) -> "SignalProcessor":
@@ -559,7 +587,7 @@ class SignalProcessor:
             raise ValueError(
                 f"to_aet requires channels {{'X', 'Y', 'Z'}}. " f"Missing: {missing}"
             )
-        X, Y, Z = self.data["X"], self.data["Y"], self.data["Z"]
+        X, Y, Z = self._data["X"], self._data["Y"], self._data["Z"]
         aet_data = {
             "A": (Z - X) / np.sqrt(2),
             "E": (X - 2 * Y + Z) / np.sqrt(6),
@@ -634,8 +662,8 @@ def process_pipeline(
         - ``target_fs`` (float): Target sampling rate in Hz
         - ``kaiser_window`` (float): Kaiser window beta parameter (default: 31.0)
     trim_kwargs : dict, optional
-        Trimming parameters. Keys:
-        - ``fraction`` (float): Fraction to trim from each end (default: 0.022)
+        Trimming parameters. Omit (or pass ``None``) to skip trimming. Keys:
+        - ``fraction`` (float): Fraction to trim from each end (default: 0.0)
     truncate_kwargs : dict, optional
         Segmentation parameters. Keys:
         - ``days`` (float): Segment length in days (default: 4.0)
@@ -644,7 +672,7 @@ def process_pipeline(
         segmentation (returns single segment with full dataset).
         Note: Remainder samples shorter than a full segment are discarded.
     window_kwargs : dict, optional
-        Windowing parameters. Keys:
+        Windowing parameters. Omit (or pass ``None``) to skip windowing. Keys:
         - ``window`` (str): Window type - 'tukey', 'hann', etc. (default: 'tukey')
         - ``alpha`` (float): Taper fraction for Tukey window (default: 0.025)
 
@@ -672,6 +700,11 @@ def process_pipeline(
     if window_kwargs is None:
         window_kwargs = {}
 
+    # Capture whether the user actually requested windowing / trimming before
+    # we normalise the dicts — empty dict is falsy, so omitting the kwarg
+    # (None → {}) and passing an empty dict both mean "skip".
+    do_window = bool(window_kwargs)
+
     # Extract filter parameters with defaults
     highpass_cutoff = filter_kwargs.get("highpass_cutoff", 5e-6)
     lowpass_cutoff = filter_kwargs.get("lowpass_cutoff", None)
@@ -681,8 +714,8 @@ def process_pipeline(
     target_fs = downsample_kwargs.get("target_fs", None)
     kaiser_window = downsample_kwargs.get("kaiser_window", KAISER_BETA_DEFAULT)
 
-    # Extract trim parameters
-    trim_fraction = trim_kwargs.get("fraction", 0.02)
+    # Extract trim parameters (fraction=0.0 → no-op)
+    trim_fraction = trim_kwargs.get("fraction", 0.0)
 
     # Extract truncate parameters
     truncate_days = truncate_kwargs.get("days", 4.0) if truncate_kwargs else None
@@ -691,8 +724,8 @@ def process_pipeline(
     window = window_kwargs.get("window", "tukey")
     window_alpha = window_kwargs.get("alpha", 0.025)
 
-    # Validate Tukey window alpha
-    if window == "tukey" and not 0 <= window_alpha <= 1:
+    # Validate Tukey window alpha (only relevant when windowing is requested)
+    if do_window and window == "tukey" and not 0 <= window_alpha <= 1:
         raise ValueError(f"Tukey window alpha must be in [0, 1], got {window_alpha}")
 
     # Validate filter order
@@ -847,35 +880,33 @@ def process_pipeline(
             end_idx = min(start_idx + segment_samples, sp.N)
 
             # Create segment — t0 advances by i full segment lengths after trimming
-            segment_data = {ch: arr[start_idx:end_idx] for ch, arr in sp.data.items()}
+            segment_data = {ch: arr[start_idx:end_idx] for ch, arr in sp._data.items()}
             segment_t0 = (
                 sp.t0 + i * segment_samples * sp.dt if sp.t0 is not None else None
             )
             seg_sp = SignalProcessor(segment_data, fs=sp.fs, t0=segment_t0)
 
-            # Apply window to this segment
-            seg_sp.apply_window(window=window, alpha=window_alpha)
+            # Apply window to this segment (optional)
+            if do_window:
+                seg_sp.apply_window(window=window, alpha=window_alpha)
 
             segments[f"segment{i}"] = seg_sp
 
         logger.info(
-            "Step 5/5 | Segment: created %d segments × %.2f days each | "
-            "Window: %s (alpha=%.4g)",
+            "Step 5/5 | Segment: created %d segments × %.2f days each | " "Window: %s",
             n_segments,
             truncate_days,
-            window,
-            window_alpha,
+            f"{window} (alpha={window_alpha:.4g})" if do_window else "none",
         )
 
         return segments
 
-    # No segmentation - apply window to full dataset
-    sp.apply_window(window=window, alpha=window_alpha)
+    # No segmentation — apply window to full dataset (optional)
+    if do_window:
+        sp.apply_window(window=window, alpha=window_alpha)
     logger.info(
-        "Step 5/5 | Window: %s (alpha=%.4g) applied to full dataset | "
-        "Ready — N=%d, fs=%.4g Hz, dt=%.4g s, T=%.4f days",
-        window,
-        window_alpha,
+        "Step 5/5 | Window: %s | " "Ready — N=%d, fs=%.4g Hz, dt=%.4g s, T=%.4f days",
+        f"{window} (alpha={window_alpha:.4g})" if do_window else "none",
         sp.N,
         sp.fs,
         sp.dt,
