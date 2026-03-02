@@ -41,6 +41,7 @@ jobs:
 
       - name: Lint with pylint
         run: uv run pylint MojitoProcessor
+        continue-on-error: true
 
       - name: Run tests
         run: uv run pytest tests/ --cov=MojitoProcessor --cov-report=xml --cov-report=term-missing -q

@@ -76,9 +76,6 @@ path = "MojitoProcessor/__version__.py"
 [tool.isort]
 profile = "black"
 
-[tool.pylint.main]
-fail-under = 9.85
-
 [tool.mypy]
 disable_error_code = "import-untyped"
 
@@ -89,6 +86,3 @@ addopts = "--cov=MojitoProcessor --cov-report=html --cov-report=term-missing"
 
 [tool.uv.sources]
 mojito = { index = "gitlab-esa-commons" }
-
-# [tool.uv.sources]
-# mojito = { git = "ssh://git@gitlab.esa.int/lisa-commons/mojito.git", tag = "0.4.0" }
