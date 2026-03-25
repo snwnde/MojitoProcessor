@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 type: software
 title: "MojitoProcessor"
-version: "0.2.1"
+version: "0.3.3"
 doi: 10.5281/zenodo.18718620
 date-released: 2026-02-21
 url: "https://github.com/OllieBurke/MojitoProcessor"
