@@ -24,6 +24,55 @@ KAISER_BETA_DEFAULT = 31.0
 logger = logging.getLogger(__name__)
 
 
+def planck_window(N, alpha=0.1):
+    """
+    Construct a Planck-taper window of length N.
+
+    Parameters
+    ----------
+    N : int
+        Number of points in the window.
+    epsilon : float, optional
+        Fraction of the window length to taper at each end.
+        Must be between 0 and 0.5. Default is 0.1.
+
+    Returns
+    -------
+    w : numpy.ndarray
+        The window function of length N.
+    """
+    # Ensure epsilon is within valid bounds
+    epsilon = alpha
+    epsilon = np.clip(epsilon, 1e-9, 0.5)
+
+    n = np.arange(N)
+    w = np.zeros(N)
+
+    # Define the transition regions
+    n1 = epsilon * (N - 1)
+    n2 = (1 - epsilon) * (N - 1)
+
+    # Region 1: Rising taper (0 <= n < n1)
+    mask1 = (n < n1)
+    z1 = np.where(mask1, epsilon * (N - 1) / (n + 1e-15) + epsilon * (N - 1) / (n - epsilon * (N - 1) + 1e-15), 0.0)
+    # w = np.where(mask1, 1.0 / (1.0 + np.exp(z1)), w)
+    z1 = np.clip(z1, -700.0, 700.0)
+    w = np.where(mask1, 1.0 / (1.0 + np.exp(z1)), w)
+
+    # Region 2: Flat top (n1 <= n <= n2)
+    mask2 = (n >= n1) & (n <= n2)
+    w = np.where(mask2, 1.0, w)
+
+    # Region 3: Falling taper (n2 < n < N)
+    mask3 = (n > n2)
+    z2 = np.where(mask3, epsilon * (N - 1) / (N - 1 - n + 1e-15) + epsilon * (N - 1) / (N - 1 - n - epsilon * (N - 1) + 1e-15), 0.0)
+    z2 = np.clip(z2, -700.0, 700.0)
+    w = np.where(mask3, 1.0 / (1.0 + np.exp(z2)), w)
+
+    return w
+
+
+
 class SignalProcessor:
     """
     Signal processor for multi-channel time series data.
@@ -431,7 +480,7 @@ class SignalProcessor:
         Parameters
         ----------
         window : str, optional
-            Window type: 'tukey', 'blackmanharris', 'hann', 'hamming', 'blackman'
+            Window type: 'tukey', 'blackmanharris', 'hann', 'hamming', 'blackman', 'planck'
             (default: 'tukey')
         **window_params :
             Additional parameters for window function.
@@ -456,6 +505,7 @@ class SignalProcessor:
             "hann": lambda N, _: hann(N),
             "hamming": lambda N, _: hamming(N),
             "blackman": lambda N, _: blackman(N),
+            "planck": lambda N, _: planck_window(N),
         }
 
         if window not in window_funcs:
@@ -479,6 +529,8 @@ class SignalProcessor:
         # For tukey, only pass 'alpha' — any other kwargs would crash scipy
         if window == "tukey":
             win = tukey(self.N, alpha=window_params.get("alpha", 0.05))
+        elif window == "planck":
+            win = planck_window(self.N, alpha=window_params.get)
         else:
             win = window_funcs[window](self.N, {})
 
