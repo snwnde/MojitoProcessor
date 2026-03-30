@@ -87,6 +87,9 @@ with MojitoL1File(mojito_data_file) as f:
         },
         "fs":    tdi_sampling.fs,
         "t_tdi": tdi_sampling.t()[:],
+        "metadata": {
+            "laser_frequency": f.laser_frequency,
+        },
     }
 
 # ── Pipeline parameters ───────────────────────────────────────────────────────
