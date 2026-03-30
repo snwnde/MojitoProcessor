@@ -24,7 +24,7 @@ KAISER_BETA_DEFAULT = 31.0
 logger = logging.getLogger(__name__)
 
 
-def planck_window(N, alpha=0.1):
+def planck_window(N, alpha=0.05):
     """
     Construct a Planck-taper window of length N.
 
@@ -32,9 +32,9 @@ def planck_window(N, alpha=0.1):
     ----------
     N : int
         Number of points in the window.
-    epsilon : float, optional
+    alpha : float, optional
         Fraction of the window length to taper at each end.
-        Must be between 0 and 0.5. Default is 0.1.
+        Must be between 0 and 0.5. Default is 0.05.
 
     Returns
     -------
@@ -53,8 +53,13 @@ def planck_window(N, alpha=0.1):
     n2 = (1 - epsilon) * (N - 1)
 
     # Region 1: Rising taper (0 <= n < n1)
-    mask1 = (n < n1)
-    z1 = np.where(mask1, epsilon * (N - 1) / (n + 1e-15) + epsilon * (N - 1) / (n - epsilon * (N - 1) + 1e-15), 0.0)
+    mask1 = n < n1
+    z1 = np.where(
+        mask1,
+        epsilon * (N - 1) / (n + 1e-15)
+        + epsilon * (N - 1) / (n - epsilon * (N - 1) + 1e-15),
+        0.0,
+    )
     # w = np.where(mask1, 1.0 / (1.0 + np.exp(z1)), w)
     z1 = np.clip(z1, -700.0, 700.0)
     w = np.where(mask1, 1.0 / (1.0 + np.exp(z1)), w)
@@ -64,13 +69,17 @@ def planck_window(N, alpha=0.1):
     w = np.where(mask2, 1.0, w)
 
     # Region 3: Falling taper (n2 < n < N)
-    mask3 = (n > n2)
-    z2 = np.where(mask3, epsilon * (N - 1) / (N - 1 - n + 1e-15) + epsilon * (N - 1) / (N - 1 - n - epsilon * (N - 1) + 1e-15), 0.0)
+    mask3 = n > n2
+    z2 = np.where(
+        mask3,
+        epsilon * (N - 1) / (N - 1 - n + 1e-15)
+        + epsilon * (N - 1) / (N - 1 - n - epsilon * (N - 1) + 1e-15),
+        0.0,
+    )
     z2 = np.clip(z2, -700.0, 700.0)
     w = np.where(mask3, 1.0 / (1.0 + np.exp(z2)), w)
 
     return w
-
 
 
 class SignalProcessor:
@@ -485,6 +494,7 @@ class SignalProcessor:
         **window_params :
             Additional parameters for window function.
             For 'tukey': alpha (default: 0.05)
+            For 'planck': alpha (default: 0.05)
             Other windows typically don't need parameters.
 
         Returns
@@ -514,23 +524,25 @@ class SignalProcessor:
                 f"Choose from {list(window_funcs.keys())}"
             )
 
-        # Set default alpha for tukey
+        # Set default alpha for windows that accept it
         if window == "tukey" and "alpha" not in window_params:
             window_params["alpha"] = 0.05
+        elif window == "planck" and "alpha" not in window_params:
+            window_params["alpha"] = 0.05
 
-        # Warn if extra kwargs passed to non-tukey windows (they will be ignored)
-        if window != "tukey" and window_params:
+        # Warn if extra kwargs passed to windows that do not accept them
+        if window not in {"tukey", "planck"} and window_params:
             logger.warning(
                 "apply_window: extra parameters %s ignored for '%s' window",
                 list(window_params.keys()),
                 window,
             )
 
-        # For tukey, only pass 'alpha' — any other kwargs would crash scipy
+        # For tukey and planck, only pass 'alpha'
         if window == "tukey":
             win = tukey(self.N, alpha=window_params.get("alpha", 0.05))
         elif window == "planck":
-            win = planck_window(self.N, alpha=window_params.get)
+            win = planck_window(self.N, alpha=window_params.get("alpha", 0.05))
         else:
             win = window_funcs[window](self.N, {})
 
@@ -774,7 +786,10 @@ def process_pipeline(
 
     # Extract window parameters
     window = window_kwargs.get("window", "tukey")
-    window_alpha = window_kwargs.get("alpha", 0.025)
+    if window == "planck":
+        window_alpha = window_kwargs.get("alpha", 0.05)
+    else:
+        window_alpha = window_kwargs.get("alpha", 0.025)
 
     # Validate Tukey window alpha (only relevant when windowing is requested)
     if do_window and window == "tukey" and not 0 <= window_alpha <= 1:
