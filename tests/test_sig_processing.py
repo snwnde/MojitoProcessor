@@ -1,4 +1,4 @@
-"""Unit tests for MojitoProcessor.SigProcessing."""
+"""Unit tests for MojitoProcessor.process.sigprocess."""
 
 import logging
 
@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_array_almost_equal, assert_array_equal
 
-from MojitoProcessor.SigProcessing import (
+from MojitoProcessor.process.sigprocess import (
     SignalProcessor,
     planck_window,
     process_pipeline,
@@ -954,9 +954,17 @@ class TestToAet:
         sp_aet = simple_sp.to_aet()
         assert sp_aet.t0 is None
 
+    def test_raises_if_already_aet(self):
+        """Calling to_aet() on a processor that already holds AET channels must raise."""
+        sp = SignalProcessor(
+            {"A": np.zeros(100), "E": np.zeros(100), "T": np.zeros(100)}, fs=1.0
+        )
+        with pytest.raises(ValueError, match="already holds AET"):
+            sp.to_aet()
+
     def test_raises_if_xyz_missing(self):
         sp = SignalProcessor({"A": np.zeros(100), "B": np.zeros(100)}, fs=1.0)
-        with pytest.raises(ValueError, match="X.*Y.*Z|Missing"):
+        with pytest.raises(ValueError, match="Missing"):
             sp.to_aet()
 
     def test_aet_values_correct(self):

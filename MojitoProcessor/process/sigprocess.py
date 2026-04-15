@@ -489,13 +489,12 @@ class SignalProcessor:
         Parameters
         ----------
         window : str, optional
-            Window type: 'tukey', 'blackmanharris', 'hann', 'hamming', 'blackman', 'planck'
-            (default: 'tukey')
+            Window type: 'tukey', 'blackmanharris', 'hann', 'hamming',
+            'blackman', 'planck' (default: 'tukey')
         **window_params :
-            Additional parameters for window function.
-            For 'tukey': alpha (default: 0.05)
-            For 'planck': alpha (default: 0.05)
-            Other windows typically don't need parameters.
+            Additional parameters for the window function.
+            ``alpha`` (float, default 0.05) is accepted by 'tukey' and 'planck'.
+            Other windows ignore extra keyword arguments (a warning is emitted).
 
         Returns
         -------
@@ -508,27 +507,18 @@ class SignalProcessor:
         >>> sp.apply_window('blackmanharris')
         >>> sp.apply_window('hann')
         """
-        # Define available windows
-        window_funcs = {
-            "tukey": lambda N, _: tukey(N),
-            "blackmanharris": lambda N, _: blackmanharris(N),
-            "hann": lambda N, _: hann(N),
-            "hamming": lambda N, _: hamming(N),
-            "blackman": lambda N, _: blackman(N),
-            "planck": lambda N, _: planck_window(N),
+        _supported = {
+            "tukey",
+            "blackmanharris",
+            "hann",
+            "hamming",
+            "blackman",
+            "planck",
         }
-
-        if window not in window_funcs:
+        if window not in _supported:
             raise ValueError(
-                f"Unknown window type: {window}. "
-                f"Choose from {list(window_funcs.keys())}"
+                f"Unknown window type: {window!r}. " f"Choose from {sorted(_supported)}"
             )
-
-        # Set default alpha for windows that accept it
-        if window == "tukey" and "alpha" not in window_params:
-            window_params["alpha"] = 0.05
-        elif window == "planck" and "alpha" not in window_params:
-            window_params["alpha"] = 0.05
 
         # Warn if extra kwargs passed to windows that do not accept them
         if window not in {"tukey", "planck"} and window_params:
@@ -538,13 +528,19 @@ class SignalProcessor:
                 window,
             )
 
-        # For tukey and planck, only pass 'alpha'
+        alpha = window_params.get("alpha", 0.05)
         if window == "tukey":
-            win = tukey(self.N, alpha=window_params.get("alpha", 0.05))
+            win = tukey(self.N, alpha=alpha)
         elif window == "planck":
-            win = planck_window(self.N, alpha=window_params.get("alpha", 0.05))
-        else:
-            win = window_funcs[window](self.N, {})
+            win = planck_window(self.N, alpha=alpha)
+        elif window == "blackmanharris":
+            win = blackmanharris(self.N)
+        elif window == "hann":
+            win = hann(self.N)
+        elif window == "hamming":
+            win = hamming(self.N)
+        else:  # blackman
+            win = blackman(self.N)
 
         # Apply window to all channels
         windowed_data = {ch: arr * win for ch, arr in self._data.items()}
@@ -646,10 +642,16 @@ class SignalProcessor:
         >>> sp_aet = sp_xyz.to_aet()
         >>> freqs, psds = sp_aet.periodogram()
         """
+        if set(self.channels) == {"A", "E", "T"}:
+            raise ValueError(
+                "to_aet() converts XYZ Michelson channels to AET. "
+                "This SignalProcessor already holds AET channels — "
+                "no conversion is needed."
+            )
         missing = {"X", "Y", "Z"} - set(self.channels)
         if missing:
             raise ValueError(
-                f"to_aet requires channels {{'X', 'Y', 'Z'}}. " f"Missing: {missing}"
+                f"to_aet() requires channels {{'X', 'Y', 'Z'}}. " f"Missing: {missing}"
             )
         X, Y, Z = self._data["X"], self._data["Y"], self._data["Z"]
         aet_data = {
@@ -710,9 +712,10 @@ def process_pipeline(
 
     Parameters
     ----------
-    data : MojitoData
-        Loaded LISA L1 data object (from ``load_mojito_l1``). Must have
-        ``data.tdis`` (dict of channel arrays) and ``data.fs`` (sampling rate).
+    data : dict
+        Loaded LISA L1 data dict (from :func:`~MojitoProcessor.io.read.load_file`).
+        Must contain ``data['tdis']`` (channel arrays) and ``data['fs']``
+        (sampling rate in Hz).
     channels : list of str, optional
         TDI channels to process. Default ``['X', 'Y', 'Z']``.
     filter_kwargs : dict, optional
