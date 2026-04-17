@@ -125,13 +125,15 @@ def load_file(
     return data
 
 
-def load_processed(path: str | pathlib.Path) -> Dict[str, SignalProcessor]:
+def load_processed(
+    path: str | pathlib.Path,
+) -> tuple[Dict[str, SignalProcessor], dict]:
     """Load processed segments from an HDF5 file written by :func:`~MojitoProcessor.io.write.write`.
 
     Reconstructs each :class:`~MojitoProcessor.process.sigprocess.SignalProcessor`
-    from the stored channel arrays and metadata attributes, returning a dict with
-    the same structure as the output of
-    :func:`~MojitoProcessor.process.sigprocess.process_pipeline`.
+    from the stored channel arrays and metadata attributes.  Per-segment orbit
+    and LTT data (written under ``/raw/<segment_name>/``) are returned alongside
+    the segments in a raw data dict.
 
     Parameters
     ----------
@@ -142,9 +144,23 @@ def load_processed(path: str | pathlib.Path) -> Dict[str, SignalProcessor]:
     Returns
     -------
     segments : dict of SignalProcessor
-        Dictionary mapping segment names (``'segment0'``, ``'segment1'``, …)
-        to reconstructed :class:`~MojitoProcessor.process.sigprocess.SignalProcessor`
-        objects with the original ``fs``, ``t0``, and channel data restored.
+        Dictionary mapping segment names to reconstructed
+        :class:`~MojitoProcessor.process.sigprocess.SignalProcessor` objects.
+    raw_data : dict
+        Auxiliary data dict.  Top-level keys:
+
+        - ``'noise_estimates'`` — dict of noise covariance arrays (if present)
+        - ``'metadata'`` — dict with ``laser_frequency`` / ``pipeline_names`` (if present)
+
+        Per-segment keys (one entry per written segment, absent if no raw data
+        was written for that segment):
+
+        - ``raw_data[seg_name]['orbits']`` — positions array
+        - ``raw_data[seg_name]['velocities']`` — velocities array (if present)
+        - ``raw_data[seg_name]['orbit_times']`` — orbit timestamps
+        - ``raw_data[seg_name]['ltts']`` — dict of LTT arrays
+        - ``raw_data[seg_name]['ltt_derivatives']`` — dict of derivative arrays (if present)
+        - ``raw_data[seg_name]['ltt_times']`` — LTT timestamps
 
     Raises
     ------
@@ -156,12 +172,13 @@ def load_processed(path: str | pathlib.Path) -> Dict[str, SignalProcessor]:
     --------
     >>> from MojitoProcessor import write, load_processed
     >>> write("processed.h5", segments, raw_data=data)
-    >>> segments = load_processed("processed.h5")
+    >>> segments, raw = load_processed("processed.h5")
     >>> sp = segments["segment0"]
-    >>> print(sp.fs, sp.N)
+    >>> orbit_positions = raw["segment0"]["orbits"]
     """
     path = pathlib.Path(path)
     segments: Dict[str, SignalProcessor] = {}
+    raw_data: dict = {}
 
     with h5py.File(path, "r") as f:
         if "processed" not in f:
@@ -178,4 +195,55 @@ def load_processed(path: str | pathlib.Path) -> Dict[str, SignalProcessor]:
             t0 = None if np.isnan(t0_raw) else t0_raw
             segments[seg_name] = SignalProcessor(data, fs=fs, t0=t0)
 
-    return segments
+        if "raw" not in f:
+            return segments, raw_data
+
+        raw_grp: h5py.Group = f["raw"]  # type: ignore[assignment]
+
+        # Top-level: noise estimates
+        if "noise_estimates" in raw_grp:
+            raw_data["noise_estimates"] = {
+                k: raw_grp["noise_estimates"][k][:] for k in raw_grp["noise_estimates"]
+            }
+
+        # Top-level: metadata
+        if "metadata" in raw_grp:
+            meta = raw_grp["metadata"]
+            md: dict = {}
+            if "laser_frequency" in meta.attrs:
+                md["laser_frequency"] = float(meta.attrs["laser_frequency"])
+            if "pipeline_names" in meta.attrs:
+                md["pipeline_names"] = json.loads(meta.attrs["pipeline_names"])
+            raw_data["metadata"] = md
+
+        # Per-segment: orbits and LTTs
+        for seg_name in segments:
+            if seg_name not in raw_grp:
+                continue
+            seg_grp: h5py.Group = raw_grp[seg_name]  # type: ignore[assignment]
+            seg_raw: dict = {}
+
+            if "orbits" in seg_grp:
+                orb = seg_grp["orbits"]
+                seg_raw["orbits"] = orb["positions"][:]
+                if "velocities" in orb:
+                    seg_raw["velocities"] = orb["velocities"][:]
+                if "times" in orb:
+                    seg_raw["orbit_times"] = orb["times"][:]
+
+            if "ltts" in seg_grp:
+                ltt = seg_grp["ltts"]
+                seg_raw["ltts"] = {
+                    k: ltt[k][:] for k in ltt if k not in ("derivatives", "times")
+                }
+                if "derivatives" in ltt:
+                    seg_raw["ltt_derivatives"] = {
+                        k: ltt["derivatives"][k][:] for k in ltt["derivatives"]
+                    }
+                if "times" in ltt:
+                    seg_raw["ltt_times"] = ltt["times"][:]
+
+            if seg_raw:
+                raw_data[seg_name] = seg_raw
+
+    return segments, raw_data
