@@ -7,31 +7,13 @@ Postprocessing tools for LISA Mojito L01 data for use with L2D noise analysis.
 
 ## Goal of package
 
-The goal of this package is to provide a simple, modular, and well-documented set of tools for processing LISA Mojito L1 data. The package applies a signal processing pipeline (filtering, downsampling, trimming, windowing) to data loaded via the [`mojito`](https://gitlab.esa.int/lisa-commons/mojito) package. The design emphasizes ease of use and flexibility, allowing users to customize the processing steps as needed for their specific analysis tasks.
+The goal of this package is to provide a simple, modular, and well-documented set of tools for processing LISA Mojito L1 data. The package applies a signal processing pipeline (filtering, downsampling, trimming, windowing) to data loaded via the [`mojito`](https://pypi.org/project/mojito/) package. The design emphasizes ease of use and flexibility, allowing users to customize the processing steps as needed for their specific analysis tasks.
 
 ## Dependencies
 
-This package depends on [`mojito`](https://gitlab.esa.int/lisa-commons/mojito), the official LISA L1 file reader, which must be installed from source (see [Installation](#installation)).
+This package depends on [`mojito`](https://pypi.org/project/mojito/), the official LISA L1 file reader. All dependencies are installed automatically via pip or uv.
 
 ## Installation
-
-### From Test PyPI (Development)
-
-This package is currently available on Test PyPI for testing. With [uv](https://docs.astral.sh/uv/) (recommended):
-
-```bash
-uv pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ mojito-processor
-```
-
-Or with pip:
-
-```bash
-pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ mojito-processor
-```
-
-### From PyPI (Coming Soon)
-
-Once stable, the package will be available on PyPI for simpler installation:
 
 ```bash
 pip install mojito-processor
