@@ -686,19 +686,6 @@ class SignalProcessor:
         )
 
 
-def _extract_orbits(data: dict) -> Optional[dict]:
-    """Build per-spacecraft orbit dict from raw data arrays, or return None."""
-    if "orbits" not in data or "orbit_times" not in data:
-        return None
-    orb = data["orbits"]  # shape (n, 3, 3), axis 1 = spacecraft index
-    result = {f"sc_position_{i + 1}": orb[:, i, :] for i in range(3)}
-    result["times"] = data["orbit_times"]
-    if "velocities" in data:
-        vel = data["velocities"]
-        result.update({f"sc_velocity_{i + 1}": vel[:, i, :] for i in range(3)})
-    return result
-
-
 def process_pipeline(
     data: dict,
     channels: Optional[List[str]] = None,
@@ -758,24 +745,11 @@ def process_pipeline(
 
     Returns
     -------
-    segments : dict
+    segments : dict of SignalProcessor
         Dictionary mapping segment names (``'segment0'``, ``'segment1'``, …)
         to :class:`SignalProcessor` objects. Each segment contains windowed
         data ready for FFT analysis. Access via ``segments['segment0'].data``,
         ``segments['segment0'].fs``, etc.
-
-        If *data* contains ``'orbits'`` and ``'orbit_times'`` keys (as returned
-        by :func:`~MojitoProcessor.io.read.load_file`), the dict also includes
-        an ``'orbits'`` key holding per-spacecraft position/velocity arrays for
-        the full loaded time span (not sliced per segment)::
-
-            segments['orbits']['sc_position_1']   # shape (n, 3) [m]
-            segments['orbits']['sc_position_2']
-            segments['orbits']['sc_position_3']
-            segments['orbits']['sc_velocity_1']   # shape (n, 3) [m/s]  (if present)
-            segments['orbits']['sc_velocity_2']
-            segments['orbits']['sc_velocity_3']
-            segments['orbits']['times']            # shape (n,) TCB [s]
 
     """
     # Set defaults
@@ -995,9 +969,6 @@ def process_pipeline(
             f"{window} (alpha={window_alpha:.4g})" if do_window else "none",
         )
 
-        orbits = _extract_orbits(data)
-        if orbits is not None:
-            segments["orbits"] = orbits
         return segments
 
     # No segmentation — apply window to full dataset (optional)
@@ -1012,8 +983,4 @@ def process_pipeline(
         sp.T / 86400,
     )
 
-    segments = {"segment0": sp}
-    orbits = _extract_orbits(data)
-    if orbits is not None:
-        segments["orbits"] = orbits
-    return segments
+    return {"segment0": sp}
