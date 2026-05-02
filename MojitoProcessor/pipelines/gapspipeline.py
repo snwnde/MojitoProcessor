@@ -54,7 +54,8 @@ def gapspipeline(
     trim_kwargs: Optional[dict] = None,
     window_kwargs: Optional[dict] = None,
     contamination_threshold: float = 1e-4,
-    min_clean_hours: float = 12.0,
+    min_clean_hours: float = 8.0,
+    max_segment_days: Optional[float] = None,
     output_path: Optional[str | pathlib.Path] = None,
 ) -> Tuple[Dict[str, SignalProcessor], np.ndarray]:
     """
@@ -96,7 +97,12 @@ def gapspipeline(
         contaminated by the filter ringing around a gap.  Default ``1e-4``.
     min_clean_hours : float, optional
         Minimum duration (hours) a contiguous clean stretch must have to be
-        kept as a segment.  Shorter stretches are discarded.  Default ``12.0``.
+        kept as a segment.  Shorter stretches are discarded.  Default ``8.0``.
+    max_segment_days : float, optional
+        Maximum duration (days) of any returned segment.  Clean runs longer
+        than this are split greedily from the front into chunks of at most
+        *max_segment_days* days; the final remainder is kept if it meets
+        *min_clean_hours*.  ``None`` (default) applies no upper limit.
     output_path : str or Path, optional
         If given, write clean segments and raw auxiliary data to this HDF5
         file via :func:`~MojitoProcessor.io.write.write`.
@@ -174,6 +180,7 @@ def gapspipeline(
         sp,
         extended_mask,
         min_clean_hours=min_clean_hours,
+        max_segment_days=max_segment_days,
     )
     logger.info("Extracted %d clean segment(s)", len(clean_segments))
 
@@ -301,9 +308,16 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--min-clean-hours",
         type=float,
-        default=12.0,
+        default=8.0,
         metavar="HOURS",
         help="Minimum clean segment duration in hours",
+    )
+    p.add_argument(
+        "--max-segment-days",
+        type=float,
+        default=None,
+        metavar="DAYS",
+        help="Maximum segment duration in days; longer clean runs are split (default: no limit)",
     )
     return p
 
@@ -330,6 +344,7 @@ if __name__ == "__main__":
         window_kwargs={"window": args.window, "alpha": args.window_alpha},
         contamination_threshold=args.contamination_threshold,
         min_clean_hours=args.min_clean_hours,
+        max_segment_days=args.max_segment_days,
         output_path=args.output,
     )
 
