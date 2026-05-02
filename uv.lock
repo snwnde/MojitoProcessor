@@ -1523,8 +1523,8 @@ wheels = [
 
 [[package]]
 name = "lisa-gap"
-version = "0.4.0"
-source = { registry = "https://test.pypi.org/simple/" }
+version = "0.4.1"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "h5py" },
     { name = "lisaconstants" },
@@ -1532,9 +1532,9 @@ dependencies = [
     { name = "numpy" },
     { name = "scipy" },
 ]
-sdist = { url = "https://test-files.pythonhosted.org/packages/7f/e6/0977cf9e34c52730a9118b7f0eaddd937a34756d6d47e8972e85ab61aba4/lisa_gap-0.4.0.tar.gz", hash = "sha256:74432d0e782389da0a048b8086722be1aa1fb067a64b350060b90ba2539158d5", size = 124468, upload-time = "2025-09-16T21:07:58.887Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/78/29/606c8fef367acd4b1138cc26ea0e6ca77d43acd32d224b46b0129cdabbce/lisa_gap-0.4.1.tar.gz", hash = "sha256:1a42b87df4c5e3b3f7b65e880e4a37c765267dfbf08374b4056b135279247217", size = 26985, upload-time = "2026-05-01T23:44:59.85Z" }
 wheels = [
-    { url = "https://test-files.pythonhosted.org/packages/20/31/0b0297dfe29e6ea869e5a50425d8dec970168d74f091d8e2073732e10417/lisa_gap-0.4.0-py3-none-any.whl", hash = "sha256:15a974d1dba1c761975ad4b2b4a67731b8bad06eff81e4ef04a3ad7cd368e81e", size = 10171, upload-time = "2025-09-16T21:07:57.414Z" },
+    { url = "https://files.pythonhosted.org/packages/73/76/7610d217f09aa464c1c660f53d0af826f229fa585d48e225bd14f555149c/lisa_gap-0.4.1-py3-none-any.whl", hash = "sha256:e8fc92053c80a8cc29832f4da7418824a39aadfbbbea819e10eedbf42da57bb3", size = 15162, upload-time = "2026-05-01T23:44:58.33Z" },
 ]
 
 [[package]]
@@ -1829,7 +1829,7 @@ docs = [
     { name = "sphinx-autodoc-typehints" },
 ]
 gaps = [
-    { name = "lisa-gap", specifier = ">=0.4", index = "https://test.pypi.org/simple/" },
+    { name = "lisa-gap", specifier = ">=0.4.1" },
     { name = "lisaglitch", specifier = ">=2.0" },
 ]
 notebooks = [

@@ -56,7 +56,7 @@ docs = [
 notebooks = ["ipykernel>=7.0", "jupyter>=1.0"]
 gaps = [
     "lisaglitch>=2.0",
-    "lisa-gap>=0.4",
+    "lisa-gap>=0.4.1",
 ]
 
 [build-system]
@@ -69,16 +69,8 @@ packages = ["MojitoProcessor"]
 [tool.hatch.version]
 path = "MojitoProcessor/__version__.py"
 
-[[tool.uv.index]]
-name = "test-pypi"
-url = "https://test.pypi.org/simple/"
-explicit = true
-
 [tool.uv]
 no-install-package = ["torch"]
-
-[tool.uv.sources]
-lisa-gap = { index = "test-pypi" }
 
 [tool.isort]
 profile = "black"
