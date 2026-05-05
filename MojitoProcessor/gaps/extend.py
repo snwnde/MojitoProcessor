@@ -14,6 +14,7 @@ array so the caller can inspect the contamination level before committing to a
 threshold.
 """
 
+import math
 from fractions import Fraction
 from typing import Tuple
 
@@ -104,35 +105,48 @@ def compute_extended_mask(
     ratio = Fraction(target_fs / fs_raw).limit_denominator(10000)
 
     # ── Determine trim sample count at the *downsampled* rate ────────────────
-    n_ds_total = scipy_signal.resample_poly(
-        np.zeros(len(smoothed_mask)), ratio.numerator, ratio.denominator
-    ).shape[0]
+    # Standard polyphase output length: ceil(N * up / down).
+    # Any 1-sample rounding discrepancy is handled by _match_length below.
+    n_ds_total = math.ceil(len(smoothed_mask) * ratio.numerator / ratio.denominator)
     trim_n = int(round(n_ds_total * trim_fraction / 2))
 
     def _downsample_trim(arr: np.ndarray) -> np.ndarray:
         ds = scipy_signal.resample_poly(arr, ratio.numerator, ratio.denominator)
         return ds[trim_n:-trim_n] if trim_n > 0 else ds
 
-    # ── Design the same Butterworth filter as the pipeline ───────────────────
+    # ── Design Butterworth filter at the *target* rate ───────────────────────
+    # Filtering at target_fs rather than fs_raw keeps the sosfiltfilt call on
+    # the smaller downsampled array (sp.N samples) instead of the full raw
+    # array (N_raw samples).  The filter cutoff frequencies are the same; only
+    # the normalised frequency changes.  When target_fs == fs_raw the filter
+    # is bit-for-bit identical to the original.
     highpass: float = filter_kwargs["highpass_cutoff"]
     lowpass = filter_kwargs.get("lowpass_cutoff", None)
     order: int = int(filter_kwargs.get("order", 2))
 
     if lowpass is not None:
         sos = scipy_signal.butter(
-            order, [highpass, lowpass], btype="bandpass", fs=fs_raw, output="sos"
+            order, [highpass, lowpass], btype="bandpass", fs=target_fs, output="sos"
         )
     else:
         sos = scipy_signal.butter(
-            order, highpass, btype="highpass", fs=fs_raw, output="sos"
+            order, highpass, btype="highpass", fs=target_fs, output="sos"
         )
 
-    # ── Filter the gap indicator ──────────────────────────────────────────────
+    # ── Compute gap indicator at raw rate, then downsample ───────────────────
+    # Computing 1-mask *before* downsampling ensures that a perfectly flat
+    # all-ones mask produces exact zeros (no resampler edge ringing).
     gap_indicator = 1.0 - np.asarray(smoothed_mask, dtype=float)
-    gap_filtered = scipy_signal.sosfiltfilt(sos, gap_indicator)
+    gap_contamination_input = _downsample_trim(gap_indicator)
+    del gap_indicator  # free raw-rate array before sosfiltfilt
 
-    # ── Downsample and trim ───────────────────────────────────────────────────
-    gap_contamination = _downsample_trim(gap_filtered)
+    # ── Filter the downsampled gap indicator ─────────────────────────────────
+    # sosfiltfilt now operates on sp.N samples instead of N_raw samples,
+    # cutting its working-memory requirement by the downsampling ratio.
+    gap_contamination = scipy_signal.sosfiltfilt(sos, gap_contamination_input)
+    del gap_contamination_input  # no longer needed
+
+    # ── Downsample and trim the mask (after sosfiltfilt to minimise peak RAM) ─
     smoothed_mask_ds = _downsample_trim(smoothed_mask.astype(float))
 
     # ── Length-match to sp.N ─────────────────────────────────────────────────

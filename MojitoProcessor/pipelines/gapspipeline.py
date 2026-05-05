@@ -129,6 +129,9 @@ def gapspipeline(
         (1.0 - float(np.mean(smoothed_mask))) * 100,
     )
     data_masked = apply_raw_mask(data, smoothed_mask)
+    # Free the large TDI channel arrays from the original load — write() only
+    # needs orbits, ltts, noise_estimates and metadata, not the TDI samples.
+    del data["tdis"], data["t_tdi"]
 
     # ── Step 3: process pipeline (no truncation, no window) ──────────────────
     # Truncation is replaced by gap-based segmentation; each clean segment is
@@ -144,6 +147,7 @@ def gapspipeline(
         window_kwargs=None,
     )
     sp = processed["segment0"]
+    del data_masked  # deepcopy no longer needed after processing
 
     # ── Step 4: compute extended mask (filter leakage around gaps) ───────────
     # compute_extended_mask requires target_fs; default to the raw rate if
