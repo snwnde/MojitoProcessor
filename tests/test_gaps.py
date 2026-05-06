@@ -4,11 +4,9 @@ import numpy as np
 import pytest
 
 from MojitoProcessor.gaps import (
-    apply_mask_to_processor,
     apply_raw_mask,
     compute_extended_mask,
     extract_clean_segments,
-    taper_mask,
 )
 from MojitoProcessor.process.sigprocess import SignalProcessor
 
@@ -115,64 +113,6 @@ class TestApplyRawMask:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# apply_mask_to_processor
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-class TestApplyMaskToProcessor:
-    def test_returns_signal_processor(self):
-        sp = _make_sp()
-        mask = np.ones(sp.N)
-        result = apply_mask_to_processor(sp, mask)
-        assert isinstance(result, SignalProcessor)
-
-    def test_does_not_mutate_original(self):
-        sp = _make_sp()
-        original_x = sp._data["X"].copy()
-        apply_mask_to_processor(sp, np.zeros(sp.N))
-        np.testing.assert_array_equal(sp._data["X"], original_x)
-
-    def test_zero_mask_zeros_all_channels(self):
-        sp = _make_sp()
-        result = apply_mask_to_processor(sp, np.zeros(sp.N))
-        for ch in result.channels:
-            np.testing.assert_array_equal(result._data[ch], 0.0)
-
-    def test_ones_mask_preserves_data(self):
-        sp = _make_sp()
-        result = apply_mask_to_processor(sp, np.ones(sp.N))
-        for ch in sp.channels:
-            np.testing.assert_array_equal(result._data[ch], sp._data[ch])
-
-    def test_fs_preserved(self):
-        sp = _make_sp(fs=2.0)
-        result = apply_mask_to_processor(sp, np.ones(sp.N))
-        assert result.fs == pytest.approx(2.0)
-
-    def test_t0_preserved(self):
-        sp = _make_sp()
-        sp.t0 = 1234.5
-        result = apply_mask_to_processor(sp, np.ones(sp.N))
-        assert result.t0 == pytest.approx(1234.5)
-
-    def test_channels_preserved(self):
-        sp = _make_sp()
-        result = apply_mask_to_processor(sp, np.ones(sp.N))
-        assert result.channels == sp.channels
-
-    def test_length_mismatch_raises(self):
-        sp = _make_sp(n=100)
-        with pytest.raises(ValueError, match="mask length"):
-            apply_mask_to_processor(sp, np.ones(99))
-
-    def test_mask_applied_element_wise(self):
-        sp = _make_sp(n=50)
-        mask = np.random.default_rng(7).uniform(0, 1, 50)
-        result = apply_mask_to_processor(sp, mask)
-        np.testing.assert_allclose(result._data["X"], sp._data["X"] * mask)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
 # compute_extended_mask
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -271,86 +211,6 @@ class TestComputeExtendedMask:
             contamination_threshold=1e-4,
         )
         np.testing.assert_array_equal(ext, 1.0)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# taper_mask
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-class TestTaperMask:
-    def _make_binary_mask(self, n: int = 1000, fs: float = 1.0) -> tuple:
-        """Return (mask, sp) with a central gap region."""
-        mask = np.ones(n, dtype=float)
-        mask[400:600] = 0.0
-        sp = _make_sp(n=n, fs=fs)
-        return mask, sp
-
-    def test_returns_array(self):
-        mask, sp = self._make_binary_mask()
-        result = taper_mask(mask, sp, taper_hours=0.0, edge_taper_hours=0.0)
-        assert isinstance(result, np.ndarray)
-
-    def test_same_length_as_input(self):
-        mask, sp = self._make_binary_mask(n=500)
-        result = taper_mask(mask, sp, taper_hours=0.0, edge_taper_hours=0.0)
-        assert len(result) == 500
-
-    def test_does_not_mutate_input(self):
-        mask, sp = self._make_binary_mask()
-        original = mask.copy()
-        taper_mask(mask, sp, taper_hours=10.0 / 3600, edge_taper_hours=0.0)
-        np.testing.assert_array_equal(mask, original)
-
-    def test_zero_taper_preserves_ones(self):
-        """With both tapers=0, the output equals the input."""
-        mask, sp = self._make_binary_mask()
-        result = taper_mask(mask, sp, taper_hours=0.0, edge_taper_hours=0.0)
-        np.testing.assert_array_equal(result, mask)
-
-    def test_gap_edges_tapered(self):
-        """Samples immediately adjacent to the gap must be < 1.0 after tapering."""
-        n, fs = 1000, 1.0
-        mask = np.ones(n, dtype=float)
-        mask[400:600] = 0.0
-        sp = _make_sp(n=n, fs=fs)
-        # 10 samples of taper = 10 seconds at 1 Hz
-        result = taper_mask(mask, sp, taper_hours=10.0 / 3600, edge_taper_hours=0.0)
-        # Just before the gap: falling taper
-        assert result[390] < 1.0
-        # Just after the gap: rising taper
-        assert result[605] < 1.0
-        # Far from gaps and edges: still 1.0
-        assert result[200] == pytest.approx(1.0)
-
-    def test_edge_taper_applied(self):
-        """First and last samples must be zero when edge_taper is non-zero."""
-        mask, sp = self._make_binary_mask(n=1000, fs=1.0)
-        # 1 sample = 1/3600 hours
-        result = taper_mask(mask, sp, taper_hours=0.0, edge_taper_hours=10.0 / 3600)
-        assert result[0] == pytest.approx(0.0)
-        assert result[-1] == pytest.approx(0.0)
-
-    def test_gap_region_remains_zero(self):
-        """The gap interior should remain zero after tapering."""
-        mask, sp = self._make_binary_mask(n=1000, fs=1.0)
-        # taper of 10 samples, gap is 200 samples wide — interior stays zero
-        result = taper_mask(mask, sp, taper_hours=10.0 / 3600, edge_taper_hours=0.0)
-        np.testing.assert_array_equal(result[450:550], 0.0)
-
-    def test_result_non_negative(self):
-        mask, sp = self._make_binary_mask()
-        result = taper_mask(
-            mask, sp, taper_hours=50.0 / 3600, edge_taper_hours=50.0 / 3600
-        )
-        assert np.all(result >= 0.0)
-
-    def test_result_at_most_one(self):
-        mask, sp = self._make_binary_mask()
-        result = taper_mask(
-            mask, sp, taper_hours=50.0 / 3600, edge_taper_hours=50.0 / 3600
-        )
-        assert np.all(result <= 1.0 + 1e-12)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

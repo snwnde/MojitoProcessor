@@ -247,7 +247,9 @@ class TestGapspipelineV2:
     """Integration tests — load_file is mocked to avoid real HDF5 I/O."""
 
     def _run(self, mask=None, extra_kw=None):
-        from MojitoProcessor.pipelines.gapspipeline_v2 import gapspipeline_v2
+        from MojitoProcessor.pipelines.gapspipeline_extend_mask import (
+            gapspipeline_extend_mask,
+        )
 
         if mask is None:
             mask = _make_binary_mask()
@@ -262,10 +264,10 @@ class TestGapspipelineV2:
             kw.update(extra_kw)
 
         with patch(
-            "MojitoProcessor.pipelines.gapspipeline_v2.load_file",
+            "MojitoProcessor.pipelines.gapspipeline_extend_mask.load_file",
             return_value=_make_raw_data(),
         ):
-            return gapspipeline_v2("dummy.h5", mask, **kw)
+            return gapspipeline_extend_mask("dummy.h5", mask, **kw)
 
     def test_returns_dict(self):
         result = self._run()
@@ -320,26 +322,32 @@ class TestGapspipelineV2:
         assert t0s == sorted(t0s)
 
     def test_binary_mask_validation_rejects_float(self):
-        from MojitoProcessor.pipelines.gapspipeline_v2 import gapspipeline_v2
+        from MojitoProcessor.pipelines.gapspipeline_extend_mask import (
+            gapspipeline_extend_mask,
+        )
 
         bad_mask = np.linspace(0, 1, _N_RAW)  # smoothed — should be rejected
         with patch(
-            "MojitoProcessor.pipelines.gapspipeline_v2.load_file",
+            "MojitoProcessor.pipelines.gapspipeline_extend_mask.load_file",
             return_value=_make_raw_data(),
         ):
             with pytest.raises(ValueError, match="smoothed"):
-                gapspipeline_v2("dummy.h5", bad_mask, filter_kwargs=_FILTER_KW)
+                gapspipeline_extend_mask("dummy.h5", bad_mask, filter_kwargs=_FILTER_KW)
 
     def test_mask_length_mismatch_raises(self):
-        from MojitoProcessor.pipelines.gapspipeline_v2 import gapspipeline_v2
+        from MojitoProcessor.pipelines.gapspipeline_extend_mask import (
+            gapspipeline_extend_mask,
+        )
 
         short_mask = np.ones(_N_RAW // 2, dtype=int)
         with patch(
-            "MojitoProcessor.pipelines.gapspipeline_v2.load_file",
+            "MojitoProcessor.pipelines.gapspipeline_extend_mask.load_file",
             return_value=_make_raw_data(),
         ):
             with pytest.raises(ValueError, match="length"):
-                gapspipeline_v2("dummy.h5", short_mask, filter_kwargs=_FILTER_KW)
+                gapspipeline_extend_mask(
+                    "dummy.h5", short_mask, filter_kwargs=_FILTER_KW
+                )
 
     def test_short_segment_discarded_when_trim_too_large(self):
         """With a very large k, short segments should be skipped."""
@@ -349,15 +357,15 @@ class TestGapspipelineV2:
 
     def test_no_apply_raw_mask_called(self):
         """v2 must not call apply_raw_mask (v1 function)."""
-        from MojitoProcessor.pipelines import gapspipeline_v2
+        from MojitoProcessor.pipelines import gapspipeline_extend_mask
 
         with (
             patch(
-                "MojitoProcessor.pipelines.gapspipeline_v2.load_file",
+                "MojitoProcessor.pipelines.gapspipeline_extend_mask.load_file",
                 return_value=_make_raw_data(),
             ) as _,
             patch(
-                "MojitoProcessor.pipelines.gapspipeline_v2.extract_clean_segments",
+                "MojitoProcessor.pipelines.gapspipeline_extend_mask.extract_clean_segments",
                 wraps=__import__(
                     "MojitoProcessor.gaps.segment", fromlist=["extract_clean_segments"]
                 ).extract_clean_segments,
@@ -365,7 +373,7 @@ class TestGapspipelineV2:
         ):
             # Import apply_raw_mask and confirm it is never touched
             with patch("MojitoProcessor.gaps.mask.apply_raw_mask") as mock_arm:
-                gapspipeline_v2(
+                gapspipeline_extend_mask(
                     "dummy.h5",
                     _make_binary_mask(),
                     filter_kwargs=_FILTER_KW,
@@ -376,13 +384,15 @@ class TestGapspipelineV2:
 
     def test_window_not_applied_when_kwargs_absent(self):
         """Omitting window_kwargs must produce un-windowed segments."""
-        from MojitoProcessor.pipelines.gapspipeline_v2 import gapspipeline_v2
+        from MojitoProcessor.pipelines.gapspipeline_extend_mask import (
+            gapspipeline_extend_mask,
+        )
 
         with patch(
-            "MojitoProcessor.pipelines.gapspipeline_v2.load_file",
+            "MojitoProcessor.pipelines.gapspipeline_extend_mask.load_file",
             return_value=_make_raw_data(),
         ):
-            result = gapspipeline_v2(
+            result = gapspipeline_extend_mask(
                 "dummy.h5",
                 _make_binary_mask(),
                 filter_kwargs=_FILTER_KW,
@@ -394,17 +404,21 @@ class TestGapspipelineV2:
         assert len(result) > 0
 
     def test_write_called_when_output_path_given(self, tmp_path):
-        from MojitoProcessor.pipelines.gapspipeline_v2 import gapspipeline_v2
+        from MojitoProcessor.pipelines.gapspipeline_extend_mask import (
+            gapspipeline_extend_mask,
+        )
 
         out = tmp_path / "out.h5"
         with (
             patch(
-                "MojitoProcessor.pipelines.gapspipeline_v2.load_file",
+                "MojitoProcessor.pipelines.gapspipeline_extend_mask.load_file",
                 return_value=_make_raw_data(),
             ),
-            patch("MojitoProcessor.pipelines.gapspipeline_v2.write") as mock_write,
+            patch(
+                "MojitoProcessor.pipelines.gapspipeline_extend_mask.write"
+            ) as mock_write,
         ):
-            gapspipeline_v2(
+            gapspipeline_extend_mask(
                 "dummy.h5",
                 _make_binary_mask(),
                 filter_kwargs=_FILTER_KW,

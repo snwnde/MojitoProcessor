@@ -1,6 +1,13 @@
 """
 Load, mask, and process a MojitoL1 HDF5 file through the full gaps pipeline.
 
+.. note::
+   For new work, prefer :func:`~MojitoProcessor.pipelines.gapspipeline_extend_mask.gapspipeline_extend_mask`.
+   The v2 pipeline segments the raw data first and processes each clean segment
+   independently, resulting in less data loss per gap edge and no
+   cross-contamination between segments.  This v1 pipeline is retained for
+   investigation and comparison purposes.
+
 Steps applied in order:
 
 1. Load raw L1 data from an HDF5 file.
@@ -20,7 +27,7 @@ contamination levels or plot the result before further analysis.
 
 Can be run as a script::
 
-    python -m MojitoProcessor.pipelines.gapspipeline path/to/data.h5 \\
+    python -m MojitoProcessor.pipelines.gapspipeline_by_segment path/to/data.h5 \\
         --mask-path smoothed_mask.npy \\
         --output processed_gaps.h5 \\
         --target-fs 0.2
@@ -38,12 +45,12 @@ from ..io.read import load_file
 from ..io.write import write
 from ..process.sigprocess import SignalProcessor, process_pipeline
 
-__all__ = ["gapspipeline"]
+__all__ = ["gapspipeline_by_segment"]
 
 logger = logging.getLogger(__name__)
 
 
-def gapspipeline(
+def gapspipeline_by_segment(
     path: str | pathlib.Path,
     smoothed_mask: np.ndarray,
     channels: Optional[List[str]] = None,
@@ -333,7 +340,7 @@ if __name__ == "__main__":
     smoothed_mask = np.load(args.mask_path)
     lowpass = args.lowpass if args.lowpass is not None else 0.8 * args.target_fs
 
-    clean_segments, extended_mask = gapspipeline(
+    clean_segments, extended_mask = gapspipeline_by_segment(
         args.input,
         smoothed_mask,
         channels=args.channels,

@@ -29,7 +29,7 @@ is **unchanged and fully supported**.  Both pipelines can be used side-by-side.
 
 Can be run as a script::
 
-    python -m MojitoProcessor.pipelines.gapspipeline_v2 path/to/data.h5 \\
+    python -m MojitoProcessor.pipelines.gapspipeline_extend_mask path/to/data.h5 \\
         --mask-path binary_mask.npy \\
         --output processed_v2.h5 \\
         --target-fs 4.0
@@ -47,12 +47,12 @@ from ..io.read import load_file
 from ..io.write import write
 from ..process.sigprocess import KAISER_BETA_DEFAULT, SignalProcessor
 
-__all__ = ["gapspipeline_v2"]
+__all__ = ["gapspipeline_extend_mask"]
 
 logger = logging.getLogger(__name__)
 
 
-def gapspipeline_v2(
+def gapspipeline_extend_mask(
     path: str | pathlib.Path,
     binary_mask: np.ndarray,
     channels: Optional[List[str]] = None,
@@ -358,7 +358,7 @@ if __name__ == "__main__":
         {"target_fs": args.target_fs} if args.target_fs is not None else None
     )
 
-    segments = gapspipeline_v2(
+    segments = gapspipeline_extend_mask(
         args.input,
         binary_mask,
         channels=args.channels,

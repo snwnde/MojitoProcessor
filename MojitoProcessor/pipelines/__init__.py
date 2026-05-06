@@ -1,8 +1,7 @@
 """MojitoProcessor pipelines — high-level pipeline entry points."""
 
-from .gapspipeline import gapspipeline
-from .gapspipeline_v2 import gapspipeline_v2
+from .gapspipeline_by_segment import gapspipeline_by_segment
+from .gapspipeline_extend_mask import gapspipeline_extend_mask
 from .pipeline import pipeline
-from .read_and_process import read_and_process
 
-__all__ = ["pipeline", "gapspipeline", "gapspipeline_v2", "read_and_process"]
+__all__ = ["pipeline", "gapspipeline_by_segment", "gapspipeline_extend_mask"]
