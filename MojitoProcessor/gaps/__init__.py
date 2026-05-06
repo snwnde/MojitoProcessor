@@ -20,11 +20,13 @@ The typical workflow is:
 from .extend import compute_extended_mask
 from .mask import apply_mask_to_processor, apply_raw_mask
 from .segment import extract_clean_segments
+from .settling import compute_settling_trim_samples
 from .taper import taper_mask
 
 __all__ = [
     "apply_raw_mask",
     "compute_extended_mask",
+    "compute_settling_trim_samples",
     "taper_mask",
     "apply_mask_to_processor",
     "extract_clean_segments",

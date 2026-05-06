@@ -124,6 +124,16 @@ def compute_extended_mask(
     lowpass = filter_kwargs.get("lowpass_cutoff", None)
     order: int = int(filter_kwargs.get("order", 2))
 
+    # Drop the lowpass if it meets or exceeds the Nyquist of target_fs.
+    # Gap leakage arises solely from the highpass impulse response; the
+    # lowpass only attenuates high-frequency content and does not introduce
+    # contamination around gap edges.  The lowpass cutoff is typically set
+    # relative to the raw sampling rate and can exceed target_fs/2 when
+    # target_fs is much lower than fs_raw.
+    nyquist_target = target_fs / 2.0
+    if lowpass is not None and lowpass >= nyquist_target:
+        lowpass = None
+
     if lowpass is not None:
         sos = scipy_signal.butter(
             order, [highpass, lowpass], btype="bandpass", fs=target_fs, output="sos"

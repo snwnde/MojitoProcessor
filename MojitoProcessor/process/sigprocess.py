@@ -420,59 +420,83 @@ class SignalProcessor:
 
         return resampled_data, self.fs
 
-    def trim(self, fraction: float) -> Dict[str, np.ndarray]:
+    def trim(
+        self,
+        fraction: Optional[float] = None,
+        *,
+        n_samples: Optional[int] = None,
+    ) -> Dict[str, np.ndarray]:
         """
-        Trim data by removing a fraction of the dataset.
+        Trim data by removing samples from each end.
+
+        Exactly one of *fraction* or *n_samples* must be provided.
 
         Parameters
         ----------
-        fraction : float
-            Total fraction of data to remove (e.g., 0.01 = 1%).
+        fraction : float, optional
+            Total fraction of data to remove, split equally between both ends
+            (e.g., 0.02 removes 1 % from each end).  Must be in ``[0, 1)``.
+        n_samples : int, optional
+            Exact number of samples to remove from **each** end (keyword-only).
+            Use this when the trim should be based on filter settling time rather
+            than a fixed fraction of the segment length.
 
         Returns
         -------
         trimmed_data : dict
-            Dictionary of trimmed channel data
+            Dictionary of trimmed channel data.
 
         Raises
         ------
         ValueError
-            If fraction is not in range [0, 1] or would remove all data
+            If neither or both of *fraction* and *n_samples* are provided,
+            if *fraction* is outside ``[0, 1)``, if *n_samples* is negative,
+            or if trimming would remove all data.
 
         Examples
         --------
-        >>> # Trim 2% total (1% from each end)
-        >>> sp.trim(fraction=0.02)
-        >>> # Trim 5% from start only
-        >>> sp.trim(fraction=0.05)
+        >>> sp.trim(fraction=0.02)        # 2 % total — existing API
+        >>> sp.trim(n_samples=27014)      # exactly 27 014 samples per end
         """
-        if not 0 <= fraction < 1:
-            raise ValueError(f"fraction must be in [0, 1), got {fraction}")
-
-        # No trimming needed
-        if fraction == 0:
-            return dict(self._data)
-
-        # Split fraction equally between both ends
-        trim_samples = int(self.N * fraction / 2)
-        if trim_samples == 0:
-            logger.warning(
-                "trim: fraction %.2e too small to remove any samples "
-                "(need at least %d samples per end). Skipping trim.",
-                fraction,
-                1,
+        if fraction is None and n_samples is None:
+            raise ValueError(
+                "Exactly one of 'fraction' or 'n_samples' must be provided."
             )
+        if fraction is not None and n_samples is not None:
+            raise ValueError("Provide either 'fraction' or 'n_samples', not both.")
+
+        if n_samples is not None:
+            if not isinstance(n_samples, int) or n_samples < 0:
+                raise ValueError(
+                    f"'n_samples' must be a non-negative integer, got {n_samples!r}"
+                )
+            trim_samples = n_samples
+        else:
+            if not 0 <= fraction < 1:
+                raise ValueError(f"fraction must be in [0, 1), got {fraction}")
+            if fraction == 0:
+                return dict(self._data)
+            trim_samples = int(self.N * fraction / 2)
+            if trim_samples == 0:
+                logger.warning(
+                    "trim: fraction %.2e too small to remove any samples "
+                    "(need at least %d samples per end). Skipping trim.",
+                    fraction,
+                    1,
+                )
+                return dict(self._data)
+
+        if trim_samples == 0:
             return dict(self._data)
         if 2 * trim_samples >= self.N:
             raise ValueError(
-                f"Cannot trim {fraction*100:.1f}% from both ends "
-                f"({2*trim_samples} samples). Would remove all data."
+                f"Cannot trim {trim_samples} samples from each end "
+                f"({2 * trim_samples} total) — would remove all {self.N} samples."
             )
+
         trimmed_data = {
             ch: arr[trim_samples:-trim_samples] for ch, arr in self._data.items()
         }
-
-        # Update internal state
         self._data = trimmed_data
         if self.t0 is not None:
             self.t0 += trim_samples * self.dt
