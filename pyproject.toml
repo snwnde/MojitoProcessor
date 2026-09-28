@@ -54,6 +54,10 @@ docs = [
     "matplotlib>=3.5",
 ]
 notebooks = ["ipykernel>=7.0", "jupyter>=1.0"]
+gaps = [
+    "lisaglitch>=2.0",
+    "lisa-gap>=0.4.1",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -64,6 +68,9 @@ packages = ["MojitoProcessor"]
 
 [tool.hatch.version]
 path = "MojitoProcessor/__version__.py"
+
+[tool.uv]
+no-install-package = ["torch"]
 
 [tool.isort]
 profile = "black"

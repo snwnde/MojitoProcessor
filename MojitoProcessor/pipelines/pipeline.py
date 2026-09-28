@@ -1,9 +1,9 @@
 """
-Read and process a MojitoL1 HDF5 file in one call.
+Load and process a MojitoL1 HDF5 file in one call.
 
 Can be run as a script::
 
-    python -m MojitoProcessor.pipelines.read_and_process path/to/data.h5 \\
+    python -m MojitoProcessor.pipelines.pipeline path/to/data.h5 \\
         --output processed.h5 \\
         --target-fs 0.2 \\
         --segment-days 7.0
@@ -18,12 +18,12 @@ from ..io.read import load_file
 from ..io.write import write
 from ..process.sigprocess import SignalProcessor, process_pipeline
 
-__all__ = ["read_and_process"]
+__all__ = ["pipeline"]
 
 logger = logging.getLogger(__name__)
 
 
-def read_and_process(
+def pipeline(
     path: str | pathlib.Path,
     channels: Optional[List[str]] = None,
     *,
@@ -203,7 +203,7 @@ if __name__ == "__main__":
 
     lowpass = args.lowpass if args.lowpass is not None else 0.8 * args.target_fs
 
-    segments = read_and_process(
+    segments = pipeline(
         args.input,
         channels=args.channels,
         load_days=args.load_days,
@@ -217,7 +217,6 @@ if __name__ == "__main__":
         truncate_kwargs={"days": args.segment_days},
         window_kwargs={"window": args.window, "alpha": args.window_alpha},
         output_path=args.output,
-        segment_ids=args.segment_ids,
     )
 
     print(f"\nProcessed {len(segments)} segment(s):")
